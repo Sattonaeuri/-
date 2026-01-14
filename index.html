@@ -17,6 +17,15 @@
         .col-key { width: 65px; flex: none !important; font-weight: bold; background: #2c2c2e; color: #a1a1a6; border: 1px solid #3a3a3c; padding: 10px 5px; border-radius: 6px; text-align: center; font-size: 13px; }
         input, select { flex: 1; min-width: 0; padding: 12px; border: 1px solid #3a3a3c; border-radius: 8px; font-size: 15px; background: #2c2c2e; color: #ffffff; box-sizing: border-box; }
         
+        /* 날짜 입력 필드 스타일 */
+        input[type="date"] {
+            color-scheme: dark;
+            -webkit-appearance: none;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+        
         button { padding: 15px; border-radius: 10px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn-blue { background: #0a84ff; color: white; width: 100%; margin-top: 10px; }
         .btn-green { background: #30d158; color: white; width: 100%; margin-top: 10px; }
@@ -66,16 +75,46 @@
         {k: "일자", v: dateStr}, {k: "채취구분", v: ""}, {k: "조사자", v: ""}
     ];
 
+    // 날짜를 "YYYY년 MM월 DD일" 형식으로 변환
+    function formatDateToKorean(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}년 ${month}월 ${day}일`;
+    }
+
+    // "YYYY년 MM월 DD일" 형식을 "YYYY-MM-DD"로 변환
+    function koreanToISO(koreanDate) {
+        const match = koreanDate.match(/(\d{4})년 (\d{2})월 (\d{2})일/);
+        return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
+    }
+
     function renderFields() {
         const container = document.getElementById('tableFields');
         container.innerHTML = '';
         currentData.forEach((item, i) => {
             const row = document.createElement('div');
             row.className = 'row';
-            row.innerHTML = `<div class="col-key">${item.k}</div>
-                             <input type="text" value="${item.v}" oninput="currentData[${i}].v=this.value">`;
+            
+            // 날짜 필드인 경우 date input 사용
+            if (item.k === "일자") {
+                const isoDate = koreanToISO(item.v);
+                row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
+                                 <input type="date" value="${isoDate}" onchange="updateDateField(${i}, this.value)">`;
+            } else {
+                row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
+                                 <input type="text" value="${item.v}" oninput="currentData[${i}].v=this.value">`;
+            }
             container.appendChild(row);
         });
+    }
+
+    // 날짜 필드 업데이트 함수
+    function updateDateField(index, isoDate) {
+        if (isoDate) {
+            const [year, month, day] = isoDate.split('-');
+            currentData[index].v = `${year}년 ${month}월 ${day}일`;
+        }
     }
 
     function getShortDate(str) {
@@ -183,18 +222,26 @@
         localStorage.setItem(storageKey, JSON.stringify(t));
         currentTemplateName = name;
         updateTmplList();
-        document.getElementById('newTemplateName').value = '';
+        document.getElementById('templateList').value = name; // 선택 상태 유지
         alert("저장 성공");
     }
 
     function loadTemplate() {
         const n = document.getElementById('templateList').value;
-        if(!n) { currentTemplateName = ""; return; }
+        const nameInput = document.getElementById('newTemplateName');
+        
+        if(!n) { 
+            currentTemplateName = ""; 
+            nameInput.value = ""; // 선택 해제 시 입력칸도 비우기
+            return; 
+        }
+        
         const t = JSON.parse(localStorage.getItem(storageKey) || '{}');
         if(t[n]) { 
             currentData = t[n]; 
-            currentData[2].v = dateStr; 
+            currentData[2].v = dateStr; // 날짜는 항상 오늘로 초기화
             currentTemplateName = n;
+            nameInput.value = n; // 템플릿 이름을 입력칸에 표시
             renderFields(); 
         }
     }
@@ -205,7 +252,10 @@
         let t = JSON.parse(localStorage.getItem(storageKey) || '{}');
         delete t[n];
         localStorage.setItem(storageKey, JSON.stringify(t));
-        if(currentTemplateName === n) currentTemplateName = "";
+        if(currentTemplateName === n) {
+            currentTemplateName = "";
+            document.getElementById('newTemplateName').value = ""; // 입력칸도 비우기
+        }
         updateTmplList();
     }
 
