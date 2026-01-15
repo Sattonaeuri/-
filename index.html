@@ -17,6 +17,27 @@
         .col-key { width: 65px; flex: none !important; font-weight: bold; background: #2c2c2e; color: #a1a1a6; border: 1px solid #3a3a3c; padding: 10px 5px; border-radius: 6px; text-align: center; font-size: 13px; }
         input, select { flex: 1; min-width: 0; padding: 12px; border: 1px solid #3a3a3c; border-radius: 8px; font-size: 15px; background: #2c2c2e; color: #ffffff; box-sizing: border-box; }
         
+        /* 입력 상자 내부 삭제 버튼 스타일 */
+        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        .input-with-clear { padding-right: 40px !important; }
+        .clear-btn { 
+            position: absolute; 
+            right: 8px; 
+            background: #8e8e93; 
+            border: none; 
+            border-radius: 50%; 
+            width: 24px; 
+            height: 24px; 
+            color: white; 
+            font-size: 14px; 
+            cursor: pointer; 
+            display: none;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+        .clear-btn:active { background: #636366; }
+        
         /* 날짜 입력 필드 스타일 */
         input[type="date"] {
             color-scheme: dark;
@@ -49,7 +70,10 @@
         <button class="btn-red" onclick="deleteTemplate()">삭제</button>
     </div>
     <div class="row">
-        <input type="text" id="newTemplateName" placeholder="새 이름">
+        <div class="input-wrapper">
+            <input type="text" id="newTemplateName" class="input-with-clear" placeholder="새 이름" oninput="toggleClearBtn()">
+            <button class="clear-btn" id="clearNameBtn" onclick="clearTemplateName()">✕</button>
+        </div>
         <button class="btn-gray" onclick="saveTemplate()">저장</button>
     </div>
 </div>
@@ -103,16 +127,27 @@
             const row = document.createElement('div');
             row.className = 'row';
             
-            // 날짜 필드인 경우 date input 사용
+            // 날짜 필드인 경우 date input 사용 (X 버튼 없음)
             if (item.k === "일자") {
                 const isoDate = koreanToISO(item.v);
                 row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
                                  <input type="date" value="${isoDate}" onchange="updateDateField(${i}, this.value)">`;
             } else {
+                // 일반 필드: 1열은 X 버튼 없음, 2열만 X 버튼 적용
                 row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
-                                 <input type="text" value="${item.v}" oninput="currentData[${i}].v=this.value">`;
+                                 <div class="input-wrapper">
+                                     <input type="text" class="input-with-clear" value="${item.v}" oninput="currentData[${i}].v=this.value; toggleFieldClearBtn(${i}, 'value')">
+                                     <button class="clear-btn" id="clearValue${i}" onclick="clearFieldInput(${i}, 'value')">✕</button>
+                                 </div>`;
             }
             container.appendChild(row);
+            
+            // 초기 X 버튼 표시/숨김 설정 (2열만)
+            if (item.k !== "일자") {
+                setTimeout(() => {
+                    toggleFieldClearBtn(i, 'value');
+                }, 0);
+            }
         });
     }
 
@@ -136,9 +171,15 @@
         openFilesBtn.style.display = 'none';
         const zip = new JSZip();
         
-        // 파일명: [템플릿이름 or 공사명] [날짜]
+        // 파일명: [템플릿이름 or 공사명] [시료번호] [날짜]
         const baseTitle = currentTemplateName || currentData[0].v || "현장사진";
-        const finalName = `${baseTitle} ${getShortDate(currentData[2].v)}`.trim();
+        const sampleNumber = currentData[1].v; // 시료번호
+        const datePart = getShortDate(currentData[2].v);
+        
+        // 시료번호가 있으면 포함, 없으면 제외
+        const finalName = sampleNumber 
+            ? `${baseTitle} ${sampleNumber} ${datePart}`.trim()
+            : `${baseTitle} ${datePart}`.trim();
 
         for (let i = 0; i < files.length; i++) {
             statusText.innerText = `${i+1}/${files.length}개 처리 중... (EXIF 복사 중)`;
@@ -241,6 +282,7 @@
         if(!n) { 
             currentTemplateName = ""; 
             nameInput.value = ""; // 선택 해제 시 입력칸도 비우기
+            toggleClearBtn(); // X 버튼 숨기기
             return; 
         }
         
@@ -250,6 +292,7 @@
             currentData[2].v = dateStr; // 날짜는 항상 오늘로 초기화
             currentTemplateName = n;
             nameInput.value = n; // 템플릿 이름을 입력칸에 표시
+            toggleClearBtn(); // X 버튼 표시
             renderFields(); 
         }
     }
@@ -272,6 +315,40 @@
         const t = JSON.parse(localStorage.getItem(storageKey) || '{}');
         s.innerHTML = '<option value="">템플릿 선택</option>';
         for(let n in t) s.innerHTML += `<option value="${n}">${n}</option>`;
+    }
+
+    // 템플릿 이름 입력 상자 지우기
+    function clearTemplateName() {
+        document.getElementById('newTemplateName').value = '';
+        document.getElementById('clearNameBtn').style.display = 'none';
+    }
+
+    // 입력 상자에 내용이 있을 때만 X 버튼 표시
+    function toggleClearBtn() {
+        const input = document.getElementById('newTemplateName');
+        const btn = document.getElementById('clearNameBtn');
+        btn.style.display = input.value ? 'flex' : 'none';
+    }
+
+    // 표 필드 입력 상자 지우기
+    function clearFieldInput(index, type) {
+        if (type === 'key') {
+            currentData[index].k = '';
+            renderFields();
+        } else {
+            currentData[index].v = '';
+            renderFields();
+        }
+    }
+
+    // 표 필드 X 버튼 표시/숨김
+    function toggleFieldClearBtn(index, type) {
+        const btnId = type === 'key' ? `clearKey${index}` : `clearValue${index}`;
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        
+        const value = type === 'key' ? currentData[index].k : currentData[index].v;
+        btn.style.display = value ? 'flex' : 'none';
     }
 
     // 템플릿 내보내기 (JSON 파일로 다운로드)
