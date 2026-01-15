@@ -165,6 +165,7 @@
                     const rowH = canvas.height * 0.045;
                     const fontSize = rowH * 0.75;
                     ctx.font = `${fontSize}px Arial`;
+                    ctx.textBaseline = 'middle';
                     
                     let maxVWidth = 0;
                     currentData.forEach(d => {
@@ -186,8 +187,8 @@
                         ctx.strokeRect(x, cy, tableW, rowH);
                         const splitX = x + keyWidth + (padding * 2);
                         ctx.beginPath(); ctx.moveTo(splitX, cy); ctx.lineTo(splitX, cy+rowH); ctx.stroke();
-                        ctx.fillText(item.k, x + padding, cy + (rowH * 0.68));
-                        ctx.fillText(item.v, splitX + padding, cy + (rowH * 0.68));
+                        ctx.fillText(item.k, x + padding, cy + (rowH * 0.5));
+                        ctx.fillText(item.v, splitX + padding, cy + (rowH * 0.5));
                     });
 
                     canvas.toBlob(blob => {
@@ -269,4 +270,4 @@
     window.onload = () => { renderFields(); updateTmplList(); };
 </script>
 </body>
-</html> 
+</html>
