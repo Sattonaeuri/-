@@ -18,7 +18,8 @@
         input, select { flex: 1; min-width: 0; padding: 12px; border: 1px solid #3a3a3c; border-radius: 8px; font-size: 15px; background: #2c2c2e; color: #ffffff; box-sizing: border-box; }
         
         /* 입력 상자 내부 삭제 버튼 스타일 */
-        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+        .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; min-width: 0; }
+        .input-wrapper input { flex: 1; min-width: 0; }
         .input-with-clear { padding-right: 40px !important; }
         .clear-btn { 
             position: absolute; 
@@ -50,8 +51,8 @@
         button { padding: 15px; border-radius: 10px; border: none; font-size: 16px; font-weight: bold; cursor: pointer; }
         .btn-blue { background: #0a84ff; color: white; width: 100%; margin-top: 10px; }
         .btn-green { background: #30d158; color: white; width: 100%; margin-top: 10px; }
-        .btn-red { background: #ff453a; color: white; width: 70px; font-size: 13px; }
-        .btn-gray { background: #8e8e93; color: white; width: 70px; font-size: 13px; }
+        .btn-red { background: #ff453a; color: white; width: 70px; font-size: 13px; flex-shrink: 0; }
+        .btn-gray { background: #8e8e93; color: white; width: 70px; font-size: 13px; flex-shrink: 0; }
         #status { text-align: center; margin-top: 15px; font-weight: 600; color: #0a84ff; }
         #openFilesBtn { display: none; }
     </style>
