@@ -7,17 +7,122 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
     <style>
-        /* 다크 모드 및 OLED 최적화 */
-        body { font-family: -apple-system, sans-serif; padding: 20px; background: #000000; color: #ffffff; }
-        .card { background: #1c1c1e; padding: 15px; border-radius: 12px; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); box-sizing: border-box; }
-        h3 { margin: 0 0 12px 0; font-size: 16px; border-bottom: 1px solid #333; padding-bottom: 8px; color: #e5e5ea; }
+        /* 다크/라이트 모드 변수 */
+        :root {
+            --bg-primary: #000000;
+            --bg-secondary: #1c1c1e;
+            --bg-tertiary: #2c2c2e;
+            --text-primary: #ffffff;
+            --text-secondary: #e5e5ea;
+            --text-tertiary: #a1a1a6;
+            --border-color: #3a3a3c;
+            --shadow: rgba(0,0,0,0.5);
+        }
         
-        /* 레이아웃 최적화: 1열 65px 및 우측 여백 확보 */
+        body.light-mode {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f2f2f7;
+            --bg-tertiary: #ffffff;
+            --text-primary: #000000;
+            --text-secondary: #1c1c1e;
+            --text-tertiary: #8e8e93;
+            --border-color: #d1d1d6;
+            --shadow: rgba(0,0,0,0.1);
+        }
+        
+        body { 
+            font-family: -apple-system, sans-serif; 
+            padding: 20px; 
+            background: var(--bg-primary); 
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
+            margin: 0;
+        }
+        
+        /* 헤더 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 0 5px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            color: var(--text-primary);
+        }
+        .settings-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-primary);
+        }
+        .back-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .card { 
+            background: var(--bg-secondary); 
+            padding: 15px; 
+            border-radius: 12px; 
+            margin-bottom: 15px; 
+            box-shadow: 0 4px 12px var(--shadow); 
+            box-sizing: border-box;
+            border: 1px solid var(--border-color);
+        }
+        h3 { 
+            margin: 0 0 12px 0; 
+            font-size: 16px; 
+            border-bottom: 1px solid var(--border-color); 
+            padding-bottom: 8px; 
+            color: var(--text-secondary); 
+        }
+        
+        /* 레이아웃 최적화 */
         .row { display: flex; gap: 10px; margin-bottom: 8px; align-items: stretch; width: 100%; }
-        .col-key { width: 65px; flex: none !important; font-weight: bold; background: #2c2c2e; color: #a1a1a6; border: 1px solid #3a3a3c; padding: 12px 5px; border-radius: 8px; text-align: center; font-size: 13px; box-sizing: border-box; }
-        input, select { flex: 1; min-width: 0; padding: 12px; border: 1px solid #3a3a3c; border-radius: 8px; font-size: 15px; background: #2c2c2e; color: #ffffff; box-sizing: border-box; }
+        .col-key { 
+            width: 65px; 
+            flex: none !important; 
+            font-weight: bold; 
+            background: var(--bg-tertiary); 
+            color: var(--text-tertiary); 
+            border: 1px solid var(--border-color); 
+            padding: 12px 5px; 
+            border-radius: 8px; 
+            text-align: center; 
+            font-size: 13px; 
+            box-sizing: border-box; 
+        }
+        input, select { 
+            flex: 1; 
+            min-width: 0; 
+            padding: 12px; 
+            border: 1px solid var(--border-color); 
+            border-radius: 8px; 
+            font-size: 15px; 
+            background: var(--bg-tertiary); 
+            color: var(--text-primary); 
+            box-sizing: border-box; 
+        }
         
-        /* 입력 상자 내부 삭제 버튼 스타일 */
+        /* 입력 상자 내부 삭제 버튼 */
         .input-wrapper { position: relative; flex: 1; display: flex; align-items: center; min-width: 0; }
         .input-wrapper input { flex: 1; min-width: 0; }
         .input-with-clear { padding-right: 40px !important; }
@@ -39,12 +144,15 @@
         }
         .clear-btn:active { background: #636366; }
         
-        /* 날짜 입력 필드 스타일 */
+        /* 날짜 입력 */
         input[type="date"] {
-            color-scheme: dark;
+            color-scheme: light dark;
             -webkit-appearance: none;
         }
-        input[type="date"]::-webkit-calendar-picker-indicator {
+        body.light-mode input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(0);
+        }
+        body:not(.light-mode) input[type="date"]::-webkit-calendar-picker-indicator {
             filter: invert(1);
         }
         
@@ -54,67 +162,199 @@
         .btn-red { background: #ff453a; color: white; width: 70px; font-size: 13px; flex-shrink: 0; }
         .btn-gray { background: #8e8e93; color: white; width: 70px; font-size: 13px; flex-shrink: 0; }
         .btn-orange { background: #ff9f0a; color: white; width: 100%; margin-top: 10px; }
+        
         #status { text-align: center; margin-top: 15px; font-weight: 600; color: #0a84ff; }
         #openFilesBtn { display: none; }
+        
+        /* 테마 토글 스위치 */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .theme-toggle-label {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 51px;
+            height: 31px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #8e8e93;
+            transition: .3s;
+            border-radius: 31px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 27px;
+            width: 27px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #0a84ff;
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+        
+        /* 화면 전환 */
+        .screen { display: none; }
+        .screen.active { display: block; }
+        
+        .setting-description {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-tertiary);
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h3>📋 표 내용 입력</h3>
-    <div id="tableFields"></div>
-</div>
-
-<div class="card">
-    <h3>💾 템플릿 관리</h3>
-    <div class="row">
-        <select id="templateList" onchange="loadTemplate()"><option value="">템플릿 선택</option></select>
-        <button class="btn-red" onclick="deleteTemplate()">삭제</button>
+<!-- 메인 화면 -->
+<div id="mainScreen" class="screen active">
+    <div class="header">
+        <h1>현장 사진 Pro</h1>
+        <button class="settings-btn" onclick="showSettings()">⚙️</button>
     </div>
-    <div class="row">
-        <div class="input-wrapper">
-            <input type="text" id="newTemplateName" class="input-with-clear" placeholder="새 이름" oninput="toggleClearBtn()">
-            <button class="clear-btn" id="clearNameBtn" onclick="clearTemplateName()">✕</button>
+
+    <div class="card">
+        <h3>📋 표 내용 입력</h3>
+        <div id="tableFields"></div>
+    </div>
+
+    <div class="card">
+        <h3>💾 템플릿 관리</h3>
+        <div class="row">
+            <select id="templateList" onchange="loadTemplate()"><option value="">템플릿 선택</option></select>
+            <button class="btn-red" onclick="deleteTemplate()">삭제</button>
         </div>
-        <button class="btn-gray" onclick="saveTemplate()">저장</button>
+        <div class="row">
+            <div class="input-wrapper">
+                <input type="text" id="newTemplateName" class="input-with-clear" placeholder="새 이름" oninput="toggleClearBtn()">
+                <button class="clear-btn" id="clearNameBtn" onclick="clearTemplateName()">✕</button>
+            </div>
+            <button class="btn-gray" onclick="saveTemplate()">저장</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <input type="file" id="imageInput" multiple accept="image/jpeg" style="display: none;">
+        <button class="btn-blue" onclick="document.getElementById('imageInput').click()">📸 사진 선택 & 작업 시작</button>
+        <div id="status">대기 중...</div>
+        <button id="openFilesBtn" class="btn-green" onclick="openFilesApp()">📂 파일 앱 열기</button>
+    </div>
+
+    <div class="card">
+        <h3>💾 템플릿 백업 & 복원</h3>
+        <button class="btn-blue" onclick="exportTemplates()">📤 템플릿 내보내기 (JSON)</button>
+        <input type="file" id="importInput" accept="application/json" style="display: none;" onchange="importTemplates(event)">
+        <button class="btn-green" onclick="document.getElementById('importInput').click()">📥 템플릿 가져오기 (JSON)</button>
     </div>
 </div>
 
-<div class="card">
-    <input type="file" id="imageInput" multiple accept="image/jpeg" style="display: none;">
-    <button class="btn-blue" onclick="document.getElementById('imageInput').click()">📸 사진 선택 & 작업 시작</button>
-    <div id="status">대기 중...</div>
-    <button id="openFilesBtn" class="btn-green" onclick="openFilesApp()">📂 파일 앱 열기</button>
-</div>
+<!-- 설정 화면 -->
+<div id="settingsScreen" class="screen">
+    <div class="header">
+        <button class="back-btn" onclick="showMain()">← 뒤로가기</button>
+        <h1>설정</h1>
+        <div style="width: 40px;"></div> <!-- 균형 맞추기 -->
+    </div>
 
-<div class="card">
-    <h3>💾 템플릿 백업 & 복원</h3>
-    <button class="btn-blue" onclick="exportTemplates()">📤 템플릿 내보내기 (JSON)</button>
-    <input type="file" id="importInput" accept="application/json" style="display: none;" onchange="importTemplates(event)">
-    <button class="btn-green" onclick="document.getElementById('importInput').click()">📥 템플릿 가져오기 (JSON)</button>
-</div>
+    <div class="card">
+        <h3>🎨 테마 설정</h3>
+        <div class="theme-toggle">
+            <span class="theme-toggle-label">다크 모드</span>
+            <label class="switch">
+                <input type="checkbox" id="themeToggle" onchange="toggleTheme()">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <div class="setting-description">밝은 화면을 원하시면 토글을 끄세요</div>
+    </div>
 
-<div class="card">
-    <h3>🔄 앱 업데이트</h3>
-    <button class="btn-orange" onclick="updateApp()">🔄 최신 버전으로 업데이트</button>
-    <div style="text-align: center; margin-top: 10px; font-size: 13px; color: #8e8e93;">캐시를 삭제하고 최신 버전을 불러옵니다</div>
+    <div class="card">
+        <h3>🔄 앱 업데이트</h3>
+        <button class="btn-orange" onclick="updateApp()">🔄 최신 버전으로 업데이트</button>
+        <div class="setting-description">캐시를 삭제하고 최신 버전을 불러옵니다</div>
+    </div>
 </div>
 
 <script>
     const storageKey = 'photo_pro_v7_final';
+    const themeKey = 'photo_pro_theme';
     const statusText = document.getElementById('status');
     const openFilesBtn = document.getElementById('openFilesBtn');
     const today = new Date();
     const dateStr = `${today.getFullYear()}년 ${String(today.getMonth() + 1).padStart(2, '0')}월 ${String(today.getDate()).padStart(2, '0')}일`;
     
-    let currentTemplateName = ""; // 현재 선택된 템플릿 이름 저장
+    let currentTemplateName = "";
 
     let currentData = [
         {k: "공사명", v: ""}, {k: "시료번호", v: ""},
         {k: "일자", v: dateStr}, {k: "채취구분", v: ""}, {k: "조사자", v: ""}
     ];
 
-    // 날짜를 "YYYY년 MM월 DD일" 형식으로 변환
+    // 화면 전환
+    function showSettings() {
+        document.getElementById('mainScreen').classList.remove('active');
+        document.getElementById('settingsScreen').classList.add('active');
+    }
+
+    function showMain() {
+        document.getElementById('settingsScreen').classList.remove('active');
+        document.getElementById('mainScreen').classList.add('active');
+    }
+
+    // 테마 전환
+    function toggleTheme() {
+        const isDark = document.getElementById('themeToggle').checked;
+        if (isDark) {
+            document.body.classList.remove('light-mode');
+            localStorage.setItem(themeKey, 'dark');
+        } else {
+            document.body.classList.add('light-mode');
+            localStorage.setItem(themeKey, 'light');
+        }
+    }
+
+    // 테마 불러오기
+    function loadTheme() {
+        const savedTheme = localStorage.getItem(themeKey) || 'dark';
+        if (savedTheme === 'light') {
+            document.body.classList.add('light-mode');
+            document.getElementById('themeToggle').checked = false;
+        } else {
+            document.body.classList.remove('light-mode');
+            document.getElementById('themeToggle').checked = true;
+        }
+    }
+
     function formatDateToKorean(date) {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -122,7 +362,6 @@
         return `${year}년 ${month}월 ${day}일`;
     }
 
-    // "YYYY년 MM월 DD일" 형식을 "YYYY-MM-DD"로 변환
     function koreanToISO(koreanDate) {
         const match = koreanDate.match(/(\d{4})년 (\d{2})월 (\d{2})일/);
         return match ? `${match[1]}-${match[2]}-${match[3]}` : '';
@@ -135,13 +374,11 @@
             const row = document.createElement('div');
             row.className = 'row';
             
-            // 날짜 필드인 경우 date input 사용 (X 버튼 없음)
             if (item.k === "일자") {
                 const isoDate = koreanToISO(item.v);
                 row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
                                  <input type="date" value="${isoDate}" onchange="updateDateField(${i}, this.value)">`;
             } else {
-                // 일반 필드: 1열은 X 버튼 없음, 2열만 X 버튼 적용
                 row.innerHTML = `<input type="text" class="col-key" value="${item.k}" oninput="currentData[${i}].k=this.value">
                                  <div class="input-wrapper">
                                      <input type="text" class="input-with-clear" value="${item.v}" oninput="currentData[${i}].v=this.value; toggleFieldClearBtn(${i}, 'value')">
@@ -150,7 +387,6 @@
             }
             container.appendChild(row);
             
-            // 초기 X 버튼 표시/숨김 설정 (2열만)
             if (item.k !== "일자") {
                 setTimeout(() => {
                     toggleFieldClearBtn(i, 'value');
@@ -159,7 +395,6 @@
         });
     }
 
-    // 날짜 필드 업데이트 함수
     function updateDateField(index, isoDate) {
         if (isoDate) {
             const [year, month, day] = isoDate.split('-');
@@ -172,7 +407,6 @@
         return match ? (match[1].substring(2) + match[2] + match[3]) : "000000";
     }
 
-    // EXIF에서 촬영 시간 추출
     async function getExifDateTime(file) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -184,13 +418,12 @@
                                    exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] || 
                                    '';
                     if (dateTime) {
-                        // "2026:01:19 14:30:45" 형식을 Date로 변환
                         const [date, time] = dateTime.split(' ');
                         const [year, month, day] = date.split(':');
                         const [hour, min, sec] = time.split(':');
                         resolve(new Date(year, month - 1, day, hour, min, sec));
                     } else {
-                        resolve(new Date(0)); // EXIF 없으면 가장 오래된 시간으로
+                        resolve(new Date(0));
                     }
                 } catch (err) {
                     resolve(new Date(0));
@@ -206,7 +439,6 @@
         openFilesBtn.style.display = 'none';
         statusText.innerText = '촬영 시간 분석 중...';
         
-        // 파일과 촬영시간을 함께 저장
         const filesWithTime = await Promise.all(
             files.map(async (file) => ({
                 file: file,
@@ -214,23 +446,19 @@
             }))
         );
         
-        // 촬영 시간 순으로 정렬 (빠른 시간 먼저)
         filesWithTime.sort((a, b) => a.time - b.time);
         const sortedFiles = filesWithTime.map(item => item.file);
         
         const zip = new JSZip();
         
-        // ZIP 파일명: [템플릿이름 or 공사명] [시료번호] [날짜]
         const baseTitle = currentTemplateName || currentData[0].v || "현장사진";
-        const sampleNumber = currentData[1].v; // 시료번호
+        const sampleNumber = currentData[1].v;
         const datePart = getShortDate(currentData[2].v);
         
-        // 시료번호가 있으면 포함, 없으면 제외
         const zipFileName = sampleNumber 
             ? `${baseTitle} ${sampleNumber} ${datePart}`.trim()
             : `${baseTitle} ${datePart}`.trim();
 
-        // 개별 사진 파일명: 시료번호 (1), 시료번호 (2), ...
         const photoBaseName = sampleNumber || "사진";
         
         for (let i = 0; i < sortedFiles.length; i++) {
@@ -323,7 +551,7 @@
         localStorage.setItem(storageKey, JSON.stringify(t));
         currentTemplateName = name;
         updateTmplList();
-        document.getElementById('templateList').value = name; // 선택 상태 유지
+        document.getElementById('templateList').value = name;
         alert("저장 성공");
     }
 
@@ -333,18 +561,18 @@
         
         if(!n) { 
             currentTemplateName = ""; 
-            nameInput.value = ""; // 선택 해제 시 입력칸도 비우기
-            toggleClearBtn(); // X 버튼 숨기기
+            nameInput.value = "";
+            toggleClearBtn();
             return; 
         }
         
         const t = JSON.parse(localStorage.getItem(storageKey) || '{}');
         if(t[n]) { 
             currentData = t[n]; 
-            currentData[2].v = dateStr; // 날짜는 항상 오늘로 초기화
+            currentData[2].v = dateStr;
             currentTemplateName = n;
-            nameInput.value = n; // 템플릿 이름을 입력칸에 표시
-            toggleClearBtn(); // X 버튼 표시
+            nameInput.value = n;
+            toggleClearBtn();
             renderFields(); 
         }
     }
@@ -357,7 +585,7 @@
         localStorage.setItem(storageKey, JSON.stringify(t));
         if(currentTemplateName === n) {
             currentTemplateName = "";
-            document.getElementById('newTemplateName').value = ""; // 입력칸도 비우기
+            document.getElementById('newTemplateName').value = "";
         }
         updateTmplList();
     }
@@ -369,20 +597,17 @@
         for(let n in t) s.innerHTML += `<option value="${n}">${n}</option>`;
     }
 
-    // 템플릿 이름 입력 상자 지우기
     function clearTemplateName() {
         document.getElementById('newTemplateName').value = '';
         document.getElementById('clearNameBtn').style.display = 'none';
     }
 
-    // 입력 상자에 내용이 있을 때만 X 버튼 표시
     function toggleClearBtn() {
         const input = document.getElementById('newTemplateName');
         const btn = document.getElementById('clearNameBtn');
         btn.style.display = input.value ? 'flex' : 'none';
     }
 
-    // 표 필드 입력 상자 지우기
     function clearFieldInput(index, type) {
         if (type === 'key') {
             currentData[index].k = '';
@@ -393,7 +618,6 @@
         }
     }
 
-    // 표 필드 X 버튼 표시/숨김
     function toggleFieldClearBtn(index, type) {
         const btnId = type === 'key' ? `clearKey${index}` : `clearValue${index}`;
         const btn = document.getElementById(btnId);
@@ -403,7 +627,6 @@
         btn.style.display = value ? 'flex' : 'none';
     }
 
-    // 템플릿 내보내기 (JSON 파일로 다운로드)
     function exportTemplates() {
         const templates = localStorage.getItem(storageKey);
         if (!templates || templates === '{}') {
@@ -419,7 +642,6 @@
         alert('템플릿을 내보냈습니다!');
     }
 
-    // 템플릿 가져오기 (JSON 파일 업로드)
     function importTemplates(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -429,7 +651,6 @@
             try {
                 const importedData = JSON.parse(e.target.result);
                 
-                // 기존 템플릿과 병합할지 확인
                 const existing = JSON.parse(localStorage.getItem(storageKey) || '{}');
                 const existingCount = Object.keys(existing).length;
                 
@@ -439,17 +660,15 @@
                 }
                 
                 if (shouldMerge) {
-                    // 병합
                     const merged = {...existing, ...importedData};
                     localStorage.setItem(storageKey, JSON.stringify(merged));
                 } else {
-                    // 교체
                     localStorage.setItem(storageKey, JSON.stringify(importedData));
                 }
                 
                 updateTmplList();
                 alert('템플릿을 가져왔습니다!');
-                document.getElementById('importInput').value = ''; // 파일 입력 초기화
+                document.getElementById('importInput').value = '';
             } catch (error) {
                 alert('올바른 템플릿 파일이 아닙니다.');
                 console.error(error);
@@ -458,10 +677,8 @@
         reader.readAsText(file);
     }
 
-    // 앱 업데이트 (캐시 삭제 및 새로고침)
     function updateApp() {
         if (confirm('앱을 최신 버전으로 업데이트합니다.\n캐시가 삭제되고 페이지가 새로고침됩니다.\n\n계속하시겠습니까?')) {
-            // Service Worker 캐시 삭제
             if ('caches' in window) {
                 caches.keys().then(function(names) {
                     for (let name of names) {
@@ -470,12 +687,15 @@
                 });
             }
             
-            // 강제 새로고침 (캐시 무시)
             window.location.reload(true);
         }
     }
 
-    window.onload = () => { renderFields(); updateTmplList(); };
+    window.onload = () => { 
+        renderFields(); 
+        updateTmplList(); 
+        loadTheme();
+    };
 </script>
 </body>
 </html>
