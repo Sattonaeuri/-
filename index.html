@@ -374,7 +374,7 @@
     
     // ========== Google Drive API 설정 ==========
     // TODO: 여기에 본인의 클라이언트 ID를 입력하세요!
-    const CLIENT_ID = 'YOUR_CLIENT_ID_HERE.apps.googleusercontent.com';
+    const CLIENT_ID = '1020242242798-ai14uvgmjsvmvbqp4fpb2unb6hjnqrr8.apps.googleusercontent.com';
     const API_KEY = ''; // API 키는 선택사항
     const SCOPES = 'https://www.googleapis.com/auth/drive.file';
     
@@ -863,7 +863,18 @@
     }
 
     function openFilesApp() {
-        window.location.href = 'shareddocuments://';
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        
+        if (isIOS) {
+            window.location.href = 'shareddocuments://';
+        } else if (isAndroid) {
+            // 안드로이드는 다운로드 폴더로 자동 저장되므로 알림만 표시
+            alert('파일이 다운로드 폴더에 저장되었습니다.');
+        } else {
+            // 데스크톱 등 기타 플랫폼
+            alert('파일이 다운로드되었습니다.');
+        }
     }
 
     function saveTemplate() {
@@ -1021,6 +1032,18 @@
         loadTheme();
         gapiLoaded();
         gisLoaded();
+        
+        // 플랫폼별 버튼 텍스트 설정
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        
+        if (isAndroid) {
+            document.getElementById('openFilesBtn').textContent = '📂 다운로드 폴더 확인';
+        } else if (isIOS) {
+            document.getElementById('openFilesBtn').textContent = '📂 파일 앱 열기';
+        } else {
+            document.getElementById('openFilesBtn').textContent = '📂 파일 확인';
+        }
     };
 </script>
 <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
