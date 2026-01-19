@@ -52,8 +52,6 @@
             margin: 0;
             font-size: 24px;
             color: var(--text-primary);
-            text-align: center;
-            flex: 1;
         }
         .settings-btn {
             background: var(--bg-tertiary);
@@ -318,8 +316,7 @@
 <div id="settingsScreen" class="screen">
     <div class="header">
         <button class="back-btn" onclick="showMain()">← 뒤로가기</button>
-        <h1>설정</h1>
-        <div style="width: 40px;"></div>
+        <h1 style="margin-left: auto;">설정</h1>
     </div>
 
     <div class="card">
@@ -627,6 +624,9 @@
                     
                     // URL 정리
                     window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // 설정 화면으로 이동
+                    showSettings();
                     
                     await updateDropboxStatus();
                     alert('Dropbox에 연결되었습니다!');
@@ -940,11 +940,14 @@
         const dropboxData = localStorage.getItem(dropboxKey);
         const driveData = localStorage.getItem(driveKey);
         
-        const useDropbox = dropboxData && JSON.parse(dropboxData).autoUpload && dropboxAccessToken;
-        const useDrive = driveData && JSON.parse(driveData).autoUpload && googleAccessToken;
+        const dropboxSettings = dropboxData ? JSON.parse(dropboxData) : null;
+        const driveSettings = driveData ? JSON.parse(driveData) : null;
+        
+        const useDropbox = dropboxSettings && dropboxSettings.autoUpload && dropboxAccessToken;
+        const useDrive = driveSettings && driveSettings.autoUpload && googleAccessToken;
         
         if (!useDropbox && !useDrive) {
-            alert('클라우드에 연결되어 있지 않습니다.\n설정에서 연결해주세요.');
+            alert('클라우드에 연결되어 있지 않습니다.\n설정에서 연결 및 자동 업로드를 활성화해주세요.');
             return;
         }
         
@@ -965,8 +968,8 @@
             document.getElementById('uploadToCloudBtn').style.display = 'none';
         } catch (error) {
             console.error('업로드 실패:', error);
-            statusText.innerText = '업로드 실패';
-            alert('업로드에 실패했습니다. 설정에서 다시 연결해주세요.');
+            statusText.innerText = '업로드 실패: ' + error.message;
+            alert('업로드에 실패했습니다.\n' + error.message + '\n\n설정에서 다시 연결해주세요.');
             document.getElementById('uploadToCloudBtn').disabled = false;
         }
     }
@@ -1137,13 +1140,14 @@
         const dropboxData = localStorage.getItem(dropboxKey);
         const driveData = localStorage.getItem(driveKey);
         
-        const useDropbox = dropboxData && JSON.parse(dropboxData).autoUpload && dropboxAccessToken;
-        const useDrive = !useDropbox && driveData && JSON.parse(driveData).autoUpload && googleAccessToken;
+        const dropboxSettings = dropboxData ? JSON.parse(dropboxData) : null;
+        const driveSettings = driveData ? JSON.parse(driveData) : null;
         
-        if (useDropbox || useDrive) {
-            const isManual = useDropbox 
-                ? JSON.parse(dropboxData).manualUpload 
-                : JSON.parse(driveData).manualUpload;
+        const useDropbox = dropboxSettings && dropboxSettings.autoUpload && dropboxAccessToken;
+        const useDrive = !useDropbox && driveSettings && driveSettings.autoUpload && googleAccessToken;
+        
+        if (useDropbox) {
+            const isManual = dropboxSettings.manualUpload;
             
             if (isManual) {
                 statusText.innerText = "로컬 저장 완료! 확인 후 클라우드에 업로드하세요.";
@@ -1152,19 +1156,30 @@
             } else {
                 try {
                     statusText.innerText = '클라우드에 업로드 중...';
-                    
-                    if (useDropbox) {
-                        await uploadToDropbox(content, currentZipFileName);
-                        statusText.innerText = '로컬 저장 & Dropbox 업로드 완료!';
-                        document.getElementById('openDropboxBtn').style.display = 'block';
-                    } else if (useDrive) {
-                        await uploadToGoogleDrive(content, currentZipFileName);
-                        statusText.innerText = '로컬 저장 & Drive 업로드 완료!';
-                        document.getElementById('openDriveBtn').style.display = 'block';
-                    }
+                    await uploadToDropbox(content, currentZipFileName);
+                    statusText.innerText = '로컬 저장 & Dropbox 업로드 완료!';
+                    document.getElementById('openDropboxBtn').style.display = 'block';
                 } catch (error) {
-                    console.error('클라우드 업로드 실패:', error);
-                    statusText.innerText = '로컬 저장 완료! (클라우드 업로드 실패)';
+                    console.error('Dropbox 업로드 실패:', error);
+                    statusText.innerText = '로컬 저장 완료! (Dropbox 업로드 실패: ' + error.message + ')';
+                }
+            }
+        } else if (useDrive) {
+            const isManual = driveSettings.manualUpload;
+            
+            if (isManual) {
+                statusText.innerText = "로컬 저장 완료! 확인 후 클라우드에 업로드하세요.";
+                document.getElementById('uploadToCloudBtn').style.display = 'block';
+                document.getElementById('uploadToCloudBtn').disabled = false;
+            } else {
+                try {
+                    statusText.innerText = '클라우드에 업로드 중...';
+                    await uploadToGoogleDrive(content, currentZipFileName);
+                    statusText.innerText = '로컬 저장 & Drive 업로드 완료!';
+                    document.getElementById('openDriveBtn').style.display = 'block';
+                } catch (error) {
+                    console.error('Drive 업로드 실패:', error);
+                    statusText.innerText = '로컬 저장 완료! (Drive 업로드 실패: ' + error.message + ')';
                 }
             }
         }
