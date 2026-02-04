@@ -309,6 +309,10 @@
         <input type="file" id="importInput" accept="application/json" style="display: none;" onchange="importTemplates(event)">
         <button class="btn-green" onclick="document.getElementById('importInput').click()">📥 템플릿 가져오기 (JSON)</button>
     </div>
+    
+    <div style="text-align: center; padding: 20px 0; color: var(--text-tertiary); font-size: 13px;">
+        만든 이 Juneui
+    </div>
 </div>
 
 <!-- 설정 화면 -->
@@ -904,13 +908,28 @@
                             try {
                                 const exifObj = piexif.load(originalDataUrl);
                                 
-                                // 원본 촬영 시간 가져오기
-                                const originalDateTime = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] || 
-                                                        exifObj['0th'][piexif.ImageIFD.DateTime];
+                                // 원본 촬영 시간 가져오기 (EXIF 형식: "2026:02:03 11:27:35")
+                                let originalDateTime = null;
                                 
-                                // 수정 날짜도 촬영 시간과 동일하게 설정
+                                // 우선순위: DateTimeOriginal > DateTime
+                                if (exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
+                                    originalDateTime = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal];
+                                } else if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.DateTime]) {
+                                    originalDateTime = exifObj['0th'][piexif.ImageIFD.DateTime];
+                                }
+                                
+                                // 촬영 시간을 모든 날짜 필드에 동일하게 설정
                                 if (originalDateTime) {
+                                    // DateTime (수정 날짜)
+                                    if (!exifObj['0th']) exifObj['0th'] = {};
                                     exifObj['0th'][piexif.ImageIFD.DateTime] = originalDateTime;
+                                    
+                                    // DateTimeOriginal (촬영 날짜)
+                                    if (!exifObj['Exif']) exifObj['Exif'] = {};
+                                    exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] = originalDateTime;
+                                    
+                                    // DateTimeDigitized (디지털화 날짜)
+                                    exifObj['Exif'][piexif.ExifIFD.DateTimeDigitized] = originalDateTime;
                                 }
                                 
                                 // 썸네일 생성 및 업데이트
@@ -934,10 +953,9 @@
                                 const thumbnailBase64 = thumbnailDataUrl.split(',')[1];
                                 
                                 // EXIF에 썸네일 추가
+                                if (!exifObj['1st']) exifObj['1st'] = {};
                                 exifObj['thumbnail'] = thumbnailBase64;
                                 exifObj['1st'][piexif.ImageIFD.Compression] = 6; // JPEG 압축
-                                exifObj['1st'][piexif.ImageIFD.JPEGInterchangeFormat] = 0;
-                                exifObj['1st'][piexif.ImageIFD.JPEGInterchangeFormatLength] = thumbnailBase64.length;
                                 
                                 const exifStr = piexif.dump(exifObj);
                                 const finalDataUrl = piexif.insert(exifStr, newDataUrl);
