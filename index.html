@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>현장 사진 Pro (HEIC 패치)</title>
+    <!-- HEIC 변환 라이브러리 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
@@ -166,7 +168,7 @@
         .btn-orange { background: #ff9f0a; color: white; width: 100%; margin-top: 10px; }
         .btn-purple { background: #bf5af2; color: white; width: 100%; margin-top: 10px; }
         
-        #status { text-align: center; margin-top: 15px; font-weight: 600; color: #0a84ff; }
+        #status { text-align: center; margin-top: 15px; font-weight: 600; color: #0a84ff; word-break: keep-all;}
         #openFilesBtn, #openDriveBtn { display: none; }
         
         /* 테마 토글 스위치 */
@@ -311,7 +313,7 @@
     </div>
     
     <div style="text-align: center; padding: 20px 0; color: var(--text-tertiary); font-size: 13px;">
-        만든 이 Juneui
+        Made by Juneui
     </div>
 </div>
 
@@ -395,6 +397,7 @@
     const tableSizeKey = 'photo_pro_table_size';
     
     // ========== Google Drive API 설정 ==========
+    // 사용자의 Client ID로 변경 필요
     const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
     const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
     
@@ -419,7 +422,7 @@
         {k: "일자", v: dateStr}, {k: "채취구분", v: ""}, {k: "조사자", v: ""}
     ];
 
-    // ... (Google API 관련 함수들은 기존과 동일하므로 생략하지 않고 그대로 둡니다) ...
+    // Google API 관련 함수들
     function gapiLoaded() { gapi.load('client', initializeGapiClient); }
     async function initializeGapiClient() { await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'], }); gapiInited = true; checkDriveConnection(); }
     function gisLoaded() { googleTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GOOGLE_CLIENT_ID, scope: GOOGLE_SCOPES, prompt: '', callback: async (response) => { if (response.error !== undefined) { throw (response); } googleAccessToken = response.access_token; await saveGoogleToken(response); await updateDriveStatus(); alert('Google Drive에 연결되었습니다!'); }, }); }
@@ -451,7 +454,7 @@
     function toRational(n) { const t = 1.0E-6; let num = 1, den = 1; while (Math.abs(n - Math.round(n)) > t && den < 100000) { n *= 10; den *= 10; } return [Math.round(n), den]; }
     function degToDmsRational(d) { const abs = Math.abs(d); const deg = Math.floor(abs); const minF = (abs - deg) * 60; const min = Math.floor(minF); const sec = Math.round((minF - min) * 60 * 10000); return [[deg, 1], [min, 1], [sec, 10000]]; }
 
-    // ========== 핵심 수정: 디버깅 및 EXIF 추출 로직 ==========
+    // ========== EXIF 날짜 추출 ==========
     async function getExifDateTime(file) {
         try {
             // exifr로 날짜 확인
@@ -494,8 +497,13 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     
     for (let i = 0; i < sortedFiles.length; i++) {
         statusText.innerText = `${i+1}/${sortedFiles.length}개 처리 중...`;
-        const blob = await processImage(sortedFiles[i]);
-        zip.file(`${photoBaseName} (${i+1}).jpg`, blob);
+        try {
+            const blob = await processImage(sortedFiles[i]);
+            zip.file(`${photoBaseName} (${i+1}).jpg`, blob);
+        } catch (err) {
+            console.error("이미지 처리 실패:", err);
+            alert(`${sortedFiles[i].name} 처리 실패 (건너뜀)`);
+        }
     }
 
     const content = await zip.generateAsync({type: "blob"});
@@ -510,7 +518,7 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     statusText.innerText = "로컬 저장 완료!";
     openFilesBtn.style.display = 'block';
 
-    // Google Drive 업로드 로직 (기존 유지)
+    // Google Drive 업로드 로직
     const driveData = localStorage.getItem(driveKey);
     const driveSettings = driveData ? JSON.parse(driveData) : null;
     if (driveSettings && driveSettings.autoUpload && googleAccessToken) {
@@ -529,116 +537,139 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
     }
 });
 
+    // 이미지 처리 함수 (HEIC 변환 및 EXIF 재삽입)
     async function processImage(file) {
-    // 1. 원본 메타데이터 추출
-    let extractedExif = null;
-    try {
-        extractedExif = await exifr.parse(file, {
-            tiff: true, exif: true, gps: true, reviveValues: true
-        });
-    } catch (e) { console.warn("EXIF 추출 실패", e); }
+        // 0. 원본 메타데이터 추출 (HEIC도 exifr가 읽을 수 있음)
+        let extractedExif = null;
+        try {
+            extractedExif = await exifr.parse(file, {
+                tiff: true, exif: true, gps: true, reviveValues: true
+            });
+        } catch (e) { console.warn("EXIF 추출 실패", e); }
 
-    return new Promise(res => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (e) => {
-            const originalDataUrl = e.target.result;
-            const img = new Image();
-            img.src = originalDataUrl;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.width; 
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-
-                // --- 표 그리기 (기존 로직 유지) ---
-                const scale = tableSize / 100;
-                const rowH = canvas.height * 0.045 * scale;
-                const fontSize = rowH * 0.75;
-                ctx.font = `${fontSize}px Arial`;
-                ctx.textBaseline = 'middle';
-                let maxVWidth = 0;
-                currentData.forEach(d => { if(ctx.measureText(d.v).width > maxVWidth) maxVWidth = ctx.measureText(d.v).width; });
-                const keyWidth = ctx.measureText("공사명일자").width;
-                const padding = 40 * scale; 
-                const tableW = keyWidth + maxVWidth + (padding * 4);
-                const tableH = rowH * 5;
-                const x = 0; const y = canvas.height - tableH;
-                ctx.fillStyle = "white"; ctx.fillRect(x, y, tableW, tableH);
-                ctx.strokeStyle = "black"; ctx.lineWidth = canvas.width * 0.0015; ctx.fillStyle = "black";
-                currentData.forEach((item, i) => {
-                    const cy = y + (i * rowH);
-                    ctx.strokeRect(x, cy, tableW, rowH);
-                    const splitX = x + keyWidth + (padding * 2);
-                    ctx.beginPath(); ctx.moveTo(splitX, cy); ctx.lineTo(splitX, cy+rowH); ctx.stroke();
-                    ctx.fillText(item.k, x + padding, cy + (rowH * 0.5));
-                    ctx.fillText(item.v, splitX + padding, cy + (rowH * 0.5));
+        // 1. HEIC 파일이면 JPEG로 변환
+        let imgBlobToProcess = file;
+        if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic')) {
+            try {
+                statusText.innerText = 'HEIC 변환 중...';
+                // heic2any를 사용하여 Blob 변환
+                const convertedBlob = await heic2any({
+                    blob: file,
+                    toType: "image/jpeg",
+                    quality: 0.9
                 });
-
-                // 2. 새로운 JPEG 생성 후 EXIF 주입
-                canvas.toBlob(blob => {
-                    const reader2 = new FileReader();
-                    reader2.readAsDataURL(blob);
-                    reader2.onload = (e2) => {
-                        const newDataUrl = e2.target.result;
-try {
-    const zeroth = {};
-    const exif = {};
-    const gps = {};
-
-    if (extractedExif) {
-        zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
-        zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
-        
-        // [핵심] 원본 촬영 날짜 가져오기
-        let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
-        let dateStr = formatDateForExif(targetDate);
-        
-        // 1. [찍은 날짜] - 사진의 메타데이터 깊숙한 곳에 기록
-        exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
-        exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
-
-        // 2. [수정한 날짜] - 이미지 정보의 기본 섹션(0th IFD)에 기록
-        // 이 부분을 촬영 날짜와 동일하게 설정하면 '수정한 날짜'도 촬영일로 나타납니다.
-        zeroth[piexif.ImageIFD.DateTime] = dateStr;
-
-        // 3. GPS 정보 (기존과 동일)
-        if (extractedExif.latitude && extractedExif.longitude) {
-            gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
-            gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
-            gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
-            gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
-            gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
-        }
-    }
-
-    const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
-    const exifStr = piexif.dump(exifObj);
-    const finalDataUrl = piexif.insert(exifStr, newDataUrl);
-    
-    fetch(finalDataUrl).then(r => r.blob()).then(res);
-} catch (err) {
-    console.error("날짜 동기화 오류:", err);
-    res(blob);
-}
-
-
-                            const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
-                            const exifStr = piexif.dump(exifObj);
-                            const finalDataUrl = piexif.insert(exifStr, newDataUrl);
-                            
-                            fetch(finalDataUrl).then(r => r.blob()).then(res);
-                        } catch (err) {
-                            console.error("메타데이터 주입 중 오류:", err);
-                            res(blob); // 에러 시 최소한 사진이라도 저장
-                        }
-                    };
-                }, "image/jpeg", 0.95);
+                // 변환 결과가 배열일 경우 첫 번째 요소 사용 (단일 파일 처리라도 배열로 반환될 수 있음)
+                imgBlobToProcess = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+            } catch (e) {
+                console.error("HEIC 변환 실패", e);
+                throw new Error("HEIC 변환 실패. 브라우저를 확인하세요.");
             }
         }
-    });
-}
+
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(imgBlobToProcess);
+            reader.onload = (e) => {
+                const originalDataUrl = e.target.result;
+                const img = new Image();
+                img.src = originalDataUrl;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width; 
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    // --- 표 그리기 ---
+                    const scale = tableSize / 100;
+                    const rowH = canvas.height * 0.045 * scale;
+                    const fontSize = rowH * 0.75;
+                    ctx.font = `${fontSize}px Arial`;
+                    ctx.textBaseline = 'middle';
+                    let maxVWidth = 0;
+                    currentData.forEach(d => { if(ctx.measureText(d.v).width > maxVWidth) maxVWidth = ctx.measureText(d.v).width; });
+                    const keyWidth = ctx.measureText("공사명일자").width;
+                    const padding = 40 * scale; 
+                    const tableW = keyWidth + maxVWidth + (padding * 4);
+                    const tableH = rowH * 5;
+                    const x = 0; const y = canvas.height - tableH;
+                    ctx.fillStyle = "white"; ctx.fillRect(x, y, tableW, tableH);
+                    ctx.strokeStyle = "black"; ctx.lineWidth = canvas.width * 0.0015; ctx.fillStyle = "black";
+                    currentData.forEach((item, i) => {
+                        const cy = y + (i * rowH);
+                        ctx.strokeRect(x, cy, tableW, rowH);
+                        const splitX = x + keyWidth + (padding * 2);
+                        ctx.beginPath(); ctx.moveTo(splitX, cy); ctx.lineTo(splitX, cy+rowH); ctx.stroke();
+                        ctx.fillText(item.k, x + padding, cy + (rowH * 0.5));
+                        ctx.fillText(item.v, splitX + padding, cy + (rowH * 0.5));
+                    });
+
+                    // 2. 새로운 JPEG 생성 후 EXIF 주입
+                    canvas.toBlob(blob => {
+                        // 스코프 문제 해결: try-catch 밖에서 변수 선언
+                        const zeroth = {};
+                        const exif = {};
+                        const gps = {};
+
+                        try {
+                            if (extractedExif) {
+                                zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
+                                zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
+                                
+                                // 원본 촬영 날짜 가져오기
+                                let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
+                                let dateStr = formatDateForExif(targetDate);
+                                
+                                // 1. [찍은 날짜]
+                                exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
+                                exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
+
+                                // 2. [수정한 날짜] (촬영일로 설정)
+                                zeroth[piexif.ImageIFD.DateTime] = dateStr;
+
+                                // 3. GPS 정보
+                                if (extractedExif.latitude && extractedExif.longitude) {
+                                    gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
+                                    gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
+                                    gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
+                                    gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
+                                    gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
+                                }
+                            }
+
+                            // EXIF 주입 로직 (try 블록 밖으로 이동하여 중복 제거 및 스코프 해결)
+                            const reader2 = new FileReader();
+                            reader2.readAsDataURL(blob);
+                            reader2.onload = (e2) => {
+                                try {
+                                    const newDataUrl = e2.target.result;
+                                    const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
+                                    const exifStr = piexif.dump(exifObj);
+                                    const finalDataUrl = piexif.insert(exifStr, newDataUrl);
+                                    
+                                    fetch(finalDataUrl).then(r => r.blob()).then(resolve);
+                                } catch (err) {
+                                    console.error("EXIF 삽입 실패:", err);
+                                    // EXIF 삽입 실패 시 원본 blob 반환
+                                    resolve(blob);
+                                }
+                            };
+
+                        } catch (err) {
+                            console.error("메타데이터 처리 오류:", err);
+                            // 치명적 오류 시 원본 blob 반환
+                            resolve(blob);
+                        }
+                    }, "image/jpeg", 0.95);
+                };
+                img.onerror = (err) => {
+                    console.error("이미지 로드 실패", err);
+                    reject(new Error("이미지를 로드할 수 없습니다."));
+                };
+            };
+        });
+    }
+
     function formatDateForExif(date) {
         if (!date) return null;
         if (typeof date === 'string') return date;
@@ -651,7 +682,7 @@ try {
         return `${y}:${m}:${d} ${h}:${min}:${s}`;
     }
 
-    // 나머지 유틸리티 함수 (파일앱열기, 템플릿 관련 등)은 기존 코드 유지
+    // 유틸리티 함수들
     function openFilesApp() {
         const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
         const isAndroid = /Android/i.test(navigator.userAgent);
