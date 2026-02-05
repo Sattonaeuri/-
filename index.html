@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>현장 사진 Pro (HEIC 패치)</title>
+    <title>현장 사진 Pro</title>
     <!-- HEIC 변환 라이브러리 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -397,7 +397,7 @@
     const tableSizeKey = 'photo_pro_table_size';
     
     // ========== Google Drive API 설정 ==========
-    const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com';
+    const GOOGLE_CLIENT_ID = '1020242242798-ai14uvgmjsvmvbqp4fpb2unb6hjnqrr8.apps.googleusercontent.com';
     const GOOGLE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
     
     // ========== 전역 변수 ==========
@@ -671,15 +671,16 @@
 
     // ========== 4. 파일 앱 및 Google Drive 함수 ==========
     function openFilesApp() {
-        // iOS 기기 확인
-        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isAndroid = /Android/i.test(navigator.userAgent);
         
         if (isIOS) {
-            // iOS에서 다운로드 위치 안내
-            alert('✅ 다운로드가 완료되었습니다!\n\n📂 파일 확인 방법:\n1. "파일" 앱을 엽니다\n2. "다운로드" 폴더를 확인하세요\n3. ZIP 파일을 탭하여 압축 해제할 수 있습니다');
+            // iOS 파일 앱 직접 열기
+            window.location.href = 'shareddocuments://';
+        } else if (isAndroid) {
+            alert('파일이 다운로드 폴더에 저장되었습니다.');
         } else {
-            // 안드로이드 및 기타 기기
-            alert('✅ 다운로드가 완료되었습니다!\n\n📂 다운로드 폴더에서 파일을 확인하세요');
+            alert('파일이 다운로드되었습니다.');
         }
     }
     
