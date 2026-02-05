@@ -582,37 +582,47 @@ document.getElementById('imageInput').addEventListener('change', async (e) => {
                     reader2.readAsDataURL(blob);
                     reader2.onload = (e2) => {
                         const newDataUrl = e2.target.result;
-                        try {
-                            const zeroth = {};
-                            const exif = {};
-                            const gps = {};
+try {
+    const zeroth = {};
+    const exif = {};
+    const gps = {};
 
-                            if (extractedExif) {
-                                // 제조사 정보
-                                zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
-                                zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
-                                
-                                // 날짜 정보 (매우 중요: YYYY:MM:DD HH:MM:SS 형식)
-                                let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
-                                let dateStr = formatDateForExif(targetDate);
-                                
-                                zeroth[piexif.ImageIFD.DateTime] = dateStr;
-                                exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
-                                exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
+    if (extractedExif) {
+        zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
+        zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
+        
+        // [핵심] 원본 촬영 날짜 가져오기
+        let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
+        let dateStr = formatDateForExif(targetDate);
+        
+        // 1. [찍은 날짜] - 사진의 메타데이터 깊숙한 곳에 기록
+        exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
+        exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
 
-                                // GPS 정보
-                                if (extractedExif.latitude && extractedExif.longitude) {
-                                    gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
-                                    gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
-                                    gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
-                                    gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
-                                    gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
-                                    if (extractedExif.altitude) {
-                                        gps[piexif.GPSIFD.GPSAltitudeRef] = 0;
-                                        gps[piexif.GPSIFD.GPSAltitude] = toRational(Math.abs(extractedExif.altitude));
-                                    }
-                                }
-                            }
+        // 2. [수정한 날짜] - 이미지 정보의 기본 섹션(0th IFD)에 기록
+        // 이 부분을 촬영 날짜와 동일하게 설정하면 '수정한 날짜'도 촬영일로 나타납니다.
+        zeroth[piexif.ImageIFD.DateTime] = dateStr;
+
+        // 3. GPS 정보 (기존과 동일)
+        if (extractedExif.latitude && extractedExif.longitude) {
+            gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
+            gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
+            gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
+            gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
+            gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
+        }
+    }
+
+    const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
+    const exifStr = piexif.dump(exifObj);
+    const finalDataUrl = piexif.insert(exifStr, newDataUrl);
+    
+    fetch(finalDataUrl).then(r => r.blob()).then(res);
+} catch (err) {
+    console.error("날짜 동기화 오류:", err);
+    res(blob);
+}
+
 
                             const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
                             const exifStr = piexif.dump(exifObj);
