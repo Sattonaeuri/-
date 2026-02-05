@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>현장 사진 Pro</title>
+    <title>현장 사진 Pro (HEIC 패치)</title>
     <!-- HEIC 변환 라이브러리 추가 -->
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -632,6 +632,7 @@
         
         const zip = new JSZip();
         const baseTitle = currentTemplateName || currentData[0].v || "현장사진";
+        const sampleNumber = currentData[1].v; // 시료번호
         const datePart = getShortDate(currentData[2].v);
         
         // 3. 이미지 처리 및 압축 추가
@@ -658,14 +659,20 @@
         statusText.innerText = '압축 파일 생성 중...';
         const content = await zip.generateAsync({type: "blob"});
         currentZipBlob = content; 
-        currentZipFileName = `${baseTitle} ${datePart}.zip`;
+        
+        // ZIP 파일명: 템플릿이름 시료번호 날짜.zip
+        if (sampleNumber) {
+            currentZipFileName = `${baseTitle} ${sampleNumber} ${datePart}.zip`;
+        } else {
+            currentZipFileName = `${baseTitle} ${datePart}.zip`;
+        }
         
         const link = document.createElement('a');
         link.href = URL.createObjectURL(content);
         link.download = currentZipFileName;
         link.click();
         
-        statusText.innerText = "✅ 완료! (시간 보정 적용됨)";
+        statusText.innerText = "완료!";
         openFilesBtn.style.display = 'block';
     });
 
