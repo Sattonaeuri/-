@@ -632,7 +632,7 @@
         
         const zip = new JSZip();
         const baseTitle = currentTemplateName || currentData[0].v || "현장사진";
-        const sampleNumber = currentData[1].v; // 시료번호
+        const sampleNumber = currentData[1].v || "사진"; // 시료번호 (없으면 "사진")
         const datePart = getShortDate(currentData[2].v);
         
         // 3. 이미지 처리 및 압축 추가
@@ -648,9 +648,8 @@
             // getTimezoneOffset()은 분 단위이므로 60000(1분=60000ms)을 곱함
             const correctedDate = new Date(target.time.getTime() - (target.time.getTimezoneOffset() * 60000));
             
-            // [핵심] ZIP 파일 안에 넣을 때 보정된 날짜 정보를 주입
-            // Windows/Mac에서는 이 날짜가 '수정한 날짜'로 표시됨
-            zip.file(`${baseTitle}_${i+1}.jpg`, processedBlob, {
+            // [핵심] 사진 파일명: 시료번호 (1).jpg, 시료번호 (2).jpg, ...
+            zip.file(`${sampleNumber} (${i+1}).jpg`, processedBlob, {
                 date: correctedDate // 타임존 보정된 날짜 사용
             });
         }
@@ -661,8 +660,8 @@
         currentZipBlob = content; 
         
         // ZIP 파일명: 템플릿이름 시료번호 날짜.zip
-        if (sampleNumber) {
-            currentZipFileName = `${baseTitle} ${sampleNumber} ${datePart}.zip`;
+        if (currentData[1].v) {
+            currentZipFileName = `${baseTitle} ${currentData[1].v} ${datePart}.zip`;
         } else {
             currentZipFileName = `${baseTitle} ${datePart}.zip`;
         }
