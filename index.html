@@ -6,6 +6,7 @@
     <title>현장 사진 Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/piexifjs/1.0.6/piexif.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exifr/dist/full.umd.js"></script>
     <style>
         /* 다크/라이트 모드 변수 */
         :root {
@@ -448,6 +449,33 @@
         {k: "공사명", v: ""}, {k: "시료번호", v: ""},
         {k: "일자", v: dateStr}, {k: "채취구분", v: ""}, {k: "조사자", v: ""}
     ];
+
+    // ========== EXIF 유틸리티 함수 ==========
+    function formatDateForExif(date) {
+        const d = (typeof date === 'string' || typeof date === 'number') ? new Date(date) : date;
+        const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+        const h = String(d.getHours()).padStart(2, '0'), min = String(d.getMinutes()).padStart(2, '0'), s = String(d.getSeconds()).padStart(2, '0');
+        return `${y}:${m}:${day} ${h}:${min}:${s}`;
+    }
+
+    function toRational(n) { 
+        const t = 1.0E-6; 
+        let num = 1, den = 1; 
+        while (Math.abs(n - Math.round(n)) > t && den < 100000) { 
+            n *= 10; 
+            den *= 10; 
+        } 
+        return [Math.round(n), den]; 
+    }
+    
+    function degToDmsRational(d) { 
+        const abs = Math.abs(d); 
+        const deg = Math.floor(abs); 
+        const minF = (abs - deg) * 60; 
+        const min = Math.floor(minF); 
+        const sec = Math.round((minF - min) * 60 * 10000); 
+        return [[deg, 1], [min, 1], [sec, 10000]]; 
+    }
 
     // ========== Google API 초기화 ==========
     function gapiLoaded() {
@@ -1235,28 +1263,12 @@
     }
 
     async function getExifDateTime(file) {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = (e) => {
-                try {
-                    const exifObj = piexif.load(e.target.result);
-                    const dateTime = exifObj['0th'][piexif.ImageIFD.DateTime] || 
-                                   exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] || 
-                                   '';
-                    if (dateTime) {
-                        const [date, time] = dateTime.split(' ');
-                        const [year, month, day] = date.split(':');
-                        const [hour, min, sec] = time.split(':');
-                        resolve(new Date(year, month - 1, day, hour, min, sec));
-                    } else {
-                        resolve(new Date(0));
-                    }
-                } catch (err) {
-                    resolve(new Date(0));
-                }
-            };
-        });
+        try {
+            const metadata = await exifr.parse(file, {pick: ['DateTimeOriginal', 'CreateDate']});
+            return (metadata && (metadata.DateTimeOriginal || metadata.CreateDate)) ? new Date(metadata.DateTimeOriginal || metadata.CreateDate) : new Date(0);
+        } catch (err) { 
+            return new Date(0); 
+        }
     }
 
     document.getElementById('imageInput').addEventListener('change', async (e) => {
@@ -1266,8 +1278,9 @@
         openFilesBtn.style.display = 'none';
         document.getElementById('openDropboxBtn').style.display = 'none';
         document.getElementById('uploadToCloudBtn').style.display = 'none';
-        statusText.innerText = '촬영 시간 분석 중...';
+        statusText.innerText = '사진 분석 및 정렬 중...';
         
+        // 시간순 정렬
         const filesWithTime = await Promise.all(
             files.map(async (file) => ({
                 file: file,
@@ -1276,7 +1289,6 @@
         );
         
         filesWithTime.sort((a, b) => a.time - b.time);
-        const sortedFiles = filesWithTime.map(item => item.file);
         
         const zip = new JSZip();
         
@@ -1290,12 +1302,24 @@
 
         const photoBaseName = sampleNumber || "사진";
         
-        for (let i = 0; i < sortedFiles.length; i++) {
-            statusText.innerText = `${i+1}/${sortedFiles.length}개 처리 중...`;
-            const blob = await processImage(sortedFiles[i]);
-            zip.file(`${photoBaseName} (${i+1}).jpg`, blob);
+        for (let i = 0; i < filesWithTime.length; i++) {
+            statusText.innerText = `${i+1}/${filesWithTime.length}개 처리 중...`;
+            const target = filesWithTime[i];
+            const blob = await processImage(target.file);
+            
+            // [핵심 1] 타임존 9시간 시차 보정
+            let fileDate = new Date();
+            if (target.time && target.time.getTime() > 0) {
+                fileDate = new Date(target.time.getTime() - (target.time.getTimezoneOffset() * 60000));
+            }
+            
+            // [핵심 2] ZIP 내부에 수정 날짜 강제 주입
+            zip.file(`${photoBaseName} (${i+1}).jpg`, blob, {
+                date: fileDate
+            });
         }
 
+        statusText.innerText = '압축 파일 생성 중...';
         const content = await zip.generateAsync({type: "blob"});
         
         currentZipBlob = content;
@@ -1325,6 +1349,8 @@
             statusText.innerText = "압축 완료! 확인 후 업로드하세요.";
             document.getElementById('uploadToCloudBtn').style.display = 'block';
             document.getElementById('uploadToCloudBtn').disabled = false;
+        } else {
+            statusText.innerText = "로컬 저장 완료!";
         }
         
         // 업로드 완전히 끝난 후 로컬 저장
@@ -1332,47 +1358,52 @@
     });
 
     async function processImage(file) {
+        let extractedExif = null;
+        try { 
+            // exifr 라이브러리로 메타데이터 정밀 추출
+            extractedExif = await exifr.parse(file, { tiff: true, exif: true, gps: true, reviveValues: true }); 
+        } catch (e) { 
+            console.warn("EXIF 추출 실패", e); 
+        }
+
         return new Promise(res => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (e) => {
-                const originalDataUrl = e.target.result;
                 const img = new Image();
-                img.src = originalDataUrl;
+                img.src = e.target.result;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    canvas.width = img.width; canvas.height = img.height;
+                    canvas.width = img.width; 
+                    canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
 
-                    // 표 크기 배율 적용 (50% ~ 150%)
+                    // --- 표 그리기 시작 ---
                     const scale = tableSize / 100;
-                    
                     const rowH = canvas.height * 0.045 * scale;
                     const fontSize = rowH * 0.75;
                     ctx.font = `${fontSize}px Arial`;
                     ctx.textBaseline = 'middle';
                     
                     let maxVWidth = 0;
-                    currentData.forEach(d => {
-                        const w = ctx.measureText(d.v).width;
-                        if(w > maxVWidth) maxVWidth = w;
+                    currentData.forEach(d => { 
+                        if(ctx.measureText(d.v).width > maxVWidth) maxVWidth = ctx.measureText(d.v).width; 
                     });
+                    
                     const keyWidth = ctx.measureText("공사명일자").width;
-                    const padding = 40 * scale; // 패딩도 비율 적용
+                    const padding = 40 * scale; 
                     const tableW = keyWidth + maxVWidth + (padding * 4);
                     const tableH = rowH * 5;
-                    
-                    // 여백 0으로 설정 (왼쪽 하단 모서리에 딱 붙임)
-                    const x = 0;
+                    const x = 0; 
                     const y = canvas.height - tableH;
 
                     ctx.fillStyle = "white"; 
                     ctx.fillRect(x, y, tableW, tableH);
                     ctx.strokeStyle = "black"; 
-                    ctx.lineWidth = canvas.width * 0.0015;
+                    ctx.lineWidth = canvas.width * 0.0015; 
                     ctx.fillStyle = "black";
-
+                    
                     currentData.forEach((item, i) => {
                         const cy = y + (i * rowH);
                         ctx.strokeRect(x, cy, tableW, rowH);
@@ -1384,6 +1415,7 @@
                         ctx.fillText(item.k, x + padding, cy + (rowH * 0.5));
                         ctx.fillText(item.v, splitX + padding, cy + (rowH * 0.5));
                     });
+                    // --- 표 그리기 끝 ---
 
                     canvas.toBlob(blob => {
                         const reader2 = new FileReader();
@@ -1391,127 +1423,46 @@
                         reader2.onload = (e2) => {
                             const newDataUrl = e2.target.result;
                             try {
-                                // 원본 EXIF 데이터 완전히 보존
-                                let exifObj = piexif.load(originalDataUrl);
+                                const zeroth = {}; 
+                                const exif = {}; 
+                                const gps = {};
                                 
-                                console.log('=== EXIF 디버깅 시작 ===');
-                                console.log('원본 EXIF 전체:', exifObj);
-                                
-                                // 원본 촬영 시간 가져오기
-                                let originalDateTime = null;
-                                
-                                // 우선순위 1: DateTimeOriginal (촬영 날짜)
-                                if (exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal]) {
-                                    originalDateTime = exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal];
-                                    console.log('✅ DateTimeOriginal 발견:', originalDateTime);
-                                }
-                                
-                                // 우선순위 2: DateTime
-                                if (!originalDateTime && exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.DateTime]) {
-                                    originalDateTime = exifObj['0th'][piexif.ImageIFD.DateTime];
-                                    console.log('✅ DateTime 발견:', originalDateTime);
-                                }
-                                
-                                // 우선순위 3: DateTimeDigitized
-                                if (!originalDateTime && exifObj['Exif'] && exifObj['Exif'][piexif.ExifIFD.DateTimeDigitized]) {
-                                    originalDateTime = exifObj['Exif'][piexif.ExifIFD.DateTimeDigitized];
-                                    console.log('✅ DateTimeDigitized 발견:', originalDateTime);
-                                }
-                                
-                                console.log('📅 최종 촬영 시간:', originalDateTime);
-                                
-                                // 날짜 필드만 통일 (나머지 EXIF는 전부 보존)
-                                if (originalDateTime) {
-                                    // 0th 초기화 (없으면)
-                                    if (!exifObj['0th']) {
-                                        exifObj['0th'] = {};
+                                // [핵심 3] 메타데이터 완벽 재구성
+                                if (extractedExif) {
+                                    zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
+                                    zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
+                                    
+                                    let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
+                                    let dateStr = formatDateForExif(targetDate);
+                                    
+                                    exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
+                                    exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
+                                    zeroth[piexif.ImageIFD.DateTime] = dateStr; // 내부 수정한 날짜 동기화
+
+                                    if (extractedExif.latitude && extractedExif.longitude) {
+                                        gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
+                                        gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
+                                        gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
+                                        gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
+                                        gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
                                     }
                                     
-                                    // Exif 초기화 (없으면)
-                                    if (!exifObj['Exif']) {
-                                        exifObj['Exif'] = {};
-                                    }
-                                    
-                                    // DateTime (수정 날짜) = 촬영 시간
-                                    exifObj['0th'][piexif.ImageIFD.DateTime] = originalDateTime;
-                                    
-                                    // DateTimeOriginal (촬영 날짜) = 촬영 시간
-                                    exifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] = originalDateTime;
-                                    
-                                    // DateTimeDigitized (디지털화 날짜) = 촬영 시간
-                                    exifObj['Exif'][piexif.ExifIFD.DateTimeDigitized] = originalDateTime;
-                                    
-                                    console.log('✅ 모든 날짜 필드 통일:', originalDateTime);
-                                } else {
-                                    console.warn('⚠️ 경고: 원본 촬영 시간을 찾을 수 없습니다!');
+                                    console.log('✅ EXIF 메타데이터 재구성 완료:', {
+                                        카메라: extractedExif.Make,
+                                        모델: extractedExif.Model,
+                                        날짜: dateStr,
+                                        GPS: extractedExif.latitude ? '있음' : '없음'
+                                    });
                                 }
                                 
-                                // GPS 정보 확인
-                                if (exifObj['GPS'] && Object.keys(exifObj['GPS']).length > 0) {
-                                    console.log('📍 GPS 정보 보존됨:', exifObj['GPS']);
-                                }
-                                
-                                // 카메라 정보 확인
-                                if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.Make]) {
-                                    console.log('📷 카메라:', exifObj['0th'][piexif.ImageIFD.Make]);
-                                }
-                                if (exifObj['0th'] && exifObj['0th'][piexif.ImageIFD.Model]) {
-                                    console.log('📷 모델:', exifObj['0th'][piexif.ImageIFD.Model]);
-                                }
-                                
-                                // 조리개, 셔터 속도 등 확인
-                                if (exifObj['Exif']) {
-                                    if (exifObj['Exif'][piexif.ExifIFD.FNumber]) {
-                                        console.log('🎯 조리개:', exifObj['Exif'][piexif.ExifIFD.FNumber]);
-                                    }
-                                    if (exifObj['Exif'][piexif.ExifIFD.ExposureTime]) {
-                                        console.log('⏱️ 셔터:', exifObj['Exif'][piexif.ExifIFD.ExposureTime]);
-                                    }
-                                    if (exifObj['Exif'][piexif.ExifIFD.ISOSpeedRatings]) {
-                                        console.log('📊 ISO:', exifObj['Exif'][piexif.ExifIFD.ISOSpeedRatings]);
-                                    }
-                                }
-                                
-                                // 썸네일 생성 및 업데이트
-                                const thumbnailCanvas = document.createElement('canvas');
-                                const thumbSize = 160;
-                                const aspectRatio = img.width / img.height;
-                                
-                                if (aspectRatio > 1) {
-                                    thumbnailCanvas.width = thumbSize;
-                                    thumbnailCanvas.height = thumbSize / aspectRatio;
-                                } else {
-                                    thumbnailCanvas.width = thumbSize * aspectRatio;
-                                    thumbnailCanvas.height = thumbSize;
-                                }
-                                
-                                const thumbCtx = thumbnailCanvas.getContext('2d');
-                                thumbCtx.drawImage(canvas, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
-                                
-                                const thumbnailDataUrl = thumbnailCanvas.toDataURL('image/jpeg', 0.8);
-                                const thumbnailBase64 = thumbnailDataUrl.split(',')[1];
-                                
-                                // EXIF에 썸네일 추가
-                                if (!exifObj['1st']) exifObj['1st'] = {};
-                                exifObj['thumbnail'] = thumbnailBase64;
-                                exifObj['1st'][piexif.ImageIFD.Compression] = 6;
-                                
-                                console.log('🖼️ 썸네일 추가 완료');
-                                console.log('=== EXIF 디버깅 종료 ===');
-                                console.log('💾 EXIF 데이터 덤프 중...');
-                                
-                                // EXIF 데이터를 새 이미지에 삽입
+                                const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
                                 const exifStr = piexif.dump(exifObj);
                                 const finalDataUrl = piexif.insert(exifStr, newDataUrl);
                                 
-                                console.log('✅ EXIF 삽입 완료!');
-                                
                                 fetch(finalDataUrl).then(r => r.blob()).then(res);
-                            } catch (err) {
-                                console.error('❌ EXIF 처리 오류:', err);
-                                console.error('오류 상세:', err.stack);
-                                // EXIF 처리 실패 시에도 이미지는 저장
-                                res(blob);
+                            } catch (err) { 
+                                console.error("메타데이터 주입 실패", err);
+                                res(blob); // 실패해도 이미지는 보존
                             }
                         };
                     }, "image/jpeg", 0.95);
