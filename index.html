@@ -1359,13 +1359,29 @@
 
     async function processImage(file) {
         let extractedExif = null;
+        let correctDate = null;  // ← 새로 추가!
+        
         try { 
-            // exifr 라이브러리로 메타데이터 정밀 추출
+            // [1단계] 날짜만 정확히 추출 (mergeOutput: true 기본값)
+            const dateData = await exifr.parse(file, {
+                pick: ['DateTimeOriginal', 'CreateDate']
+            });
+            correctDate = dateData?.DateTimeOriginal || dateData?.CreateDate;
+            console.log('📅 올바른 날짜 추출:', correctDate);
+            
+            // [2단계] 전체 EXIF 추출 (기존 방식)
             extractedExif = await exifr.parse(file, { 
                 tiff: true, 
                 exif: true, 
                 gps: true, 
-                reviveValues: true
+                iptc: true,
+                icc: true,
+                jfif: true,
+                ihdr: true,
+                reviveValues: true,
+                translateKeys: false,
+                translateValues: false,
+                mergeOutput: false
             }); 
         } catch (e) { 
             console.warn("EXIF 추출 실패", e); 
@@ -1448,7 +1464,7 @@
                                         originalExifObj['0th'][piexif.ImageIFD.Model] = String(extractedExif.Model);
                                     }
                                     
-                                    // 날짜 동기화
+                                    // [기존 방식] 날짜 임시 주입 (나중에 덮어씀)
                                     let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
                                     let dateStr = formatDateForExif(targetDate);
                                     
@@ -1531,9 +1547,22 @@
                                         ISO: extractedExif.ISO,
                                         초점거리: extractedExif.FocalLength,
                                         렌즈: extractedExif.LensModel,
-                                        날짜: dateStr,
                                         GPS: extractedExif.latitude ? '있음' : '없음'
                                     });
+                                }
+                                
+                                // [3단계] 올바른 날짜로 최종 덮어쓰기!
+                                if (correctDate) {
+                                    let correctDateStr = formatDateForExif(correctDate);
+                                    
+                                    if (!originalExifObj['Exif']) originalExifObj['Exif'] = {};
+                                    originalExifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] = correctDateStr;
+                                    originalExifObj['Exif'][piexif.ExifIFD.DateTimeDigitized] = correctDateStr;
+                                    originalExifObj['0th'][piexif.ImageIFD.DateTime] = correctDateStr;
+                                    
+                                    console.log('📅 날짜 최종 수정:', correctDateStr);
+                                } else {
+                                    console.warn('⚠️ 올바른 날짜를 찾을 수 없음');
                                 }
                                 
                                 // EXIF 데이터를 새 이미지에 삽입
