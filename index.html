@@ -1360,19 +1360,12 @@
     async function processImage(file) {
         let extractedExif = null;
         try { 
-            // exifr 라이브러리로 메타데이터 정밀 추출 (모든 데이터!)
+            // exifr 라이브러리로 메타데이터 정밀 추출
             extractedExif = await exifr.parse(file, { 
                 tiff: true, 
                 exif: true, 
                 gps: true, 
-                iptc: true,
-                icc: true,
-                jfif: true,
-                ihdr: true,
-                reviveValues: true,
-                translateKeys: false,
-                translateValues: false,
-                mergeOutput: false
+                reviveValues: true
             }); 
         } catch (e) { 
             console.warn("EXIF 추출 실패", e); 
