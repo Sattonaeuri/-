@@ -1360,8 +1360,20 @@
     async function processImage(file) {
         let extractedExif = null;
         try { 
-            // exifr 라이브러리로 메타데이터 정밀 추출
-            extractedExif = await exifr.parse(file, { tiff: true, exif: true, gps: true, reviveValues: true }); 
+            // exifr 라이브러리로 메타데이터 정밀 추출 (모든 데이터!)
+            extractedExif = await exifr.parse(file, { 
+                tiff: true, 
+                exif: true, 
+                gps: true, 
+                iptc: true,
+                icc: true,
+                jfif: true,
+                ihdr: true,
+                reviveValues: true,
+                translateKeys: false,
+                translateValues: false,
+                mergeOutput: false
+            }); 
         } catch (e) { 
             console.warn("EXIF 추출 실패", e); 
         }
@@ -1370,8 +1382,9 @@
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = (e) => {
+                const originalDataUrl = e.target.result;
                 const img = new Image();
-                img.src = e.target.result;
+                img.src = originalDataUrl;
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -1423,40 +1436,115 @@
                         reader2.onload = (e2) => {
                             const newDataUrl = e2.target.result;
                             try {
-                                const zeroth = {}; 
-                                const exif = {}; 
-                                const gps = {};
+                                // [핵심] 원본 EXIF 완전히 로드
+                                let originalExifObj = {};
+                                try {
+                                    originalExifObj = piexif.load(originalDataUrl);
+                                } catch (err) {
+                                    console.warn('원본 EXIF 로드 실패 (HEIC일 수 있음)');
+                                    originalExifObj = { "0th": {}, "Exif": {}, "GPS": {}, "Interop": {}, "1st": {} };
+                                }
                                 
-                                // [핵심 3] 메타데이터 완벽 재구성
+                                // exifr에서 추출한 데이터로 보강
                                 if (extractedExif) {
-                                    zeroth[piexif.ImageIFD.Make] = String(extractedExif.Make || "Apple");
-                                    zeroth[piexif.ImageIFD.Model] = String(extractedExif.Model || "iPhone");
+                                    // Make, Model
+                                    if (extractedExif.Make) {
+                                        originalExifObj['0th'][piexif.ImageIFD.Make] = String(extractedExif.Make);
+                                    }
+                                    if (extractedExif.Model) {
+                                        originalExifObj['0th'][piexif.ImageIFD.Model] = String(extractedExif.Model);
+                                    }
                                     
+                                    // 날짜 동기화
                                     let targetDate = extractedExif.DateTimeOriginal || extractedExif.CreateDate || new Date();
                                     let dateStr = formatDateForExif(targetDate);
                                     
-                                    exif[piexif.ExifIFD.DateTimeOriginal] = dateStr;
-                                    exif[piexif.ExifIFD.DateTimeDigitized] = dateStr;
-                                    zeroth[piexif.ImageIFD.DateTime] = dateStr; // 내부 수정한 날짜 동기화
+                                    if (!originalExifObj['Exif']) originalExifObj['Exif'] = {};
+                                    originalExifObj['Exif'][piexif.ExifIFD.DateTimeOriginal] = dateStr;
+                                    originalExifObj['Exif'][piexif.ExifIFD.DateTimeDigitized] = dateStr;
+                                    originalExifObj['0th'][piexif.ImageIFD.DateTime] = dateStr;
 
-                                    if (extractedExif.latitude && extractedExif.longitude) {
-                                        gps[piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
-                                        gps[piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
-                                        gps[piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
-                                        gps[piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
-                                        gps[piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
+                                    // 조리개 (FNumber)
+                                    if (extractedExif.FNumber !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.FNumber] = toRational(extractedExif.FNumber);
                                     }
                                     
-                                    console.log('✅ EXIF 메타데이터 재구성 완료:', {
+                                    // 셔터 속도 (ExposureTime)
+                                    if (extractedExif.ExposureTime !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.ExposureTime] = toRational(extractedExif.ExposureTime);
+                                    }
+                                    
+                                    // ISO
+                                    if (extractedExif.ISO !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.ISOSpeedRatings] = extractedExif.ISO;
+                                    }
+                                    
+                                    // 초점 거리 (FocalLength)
+                                    if (extractedExif.FocalLength !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.FocalLength] = toRational(extractedExif.FocalLength);
+                                    }
+                                    
+                                    // 렌즈 모델
+                                    if (extractedExif.LensModel) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.LensModel] = String(extractedExif.LensModel);
+                                    }
+                                    
+                                    // 화이트 밸런스
+                                    if (extractedExif.WhiteBalance !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.WhiteBalance] = extractedExif.WhiteBalance;
+                                    }
+                                    
+                                    // 플래시
+                                    if (extractedExif.Flash !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.Flash] = extractedExif.Flash;
+                                    }
+                                    
+                                    // 노출 모드
+                                    if (extractedExif.ExposureMode !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.ExposureMode] = extractedExif.ExposureMode;
+                                    }
+                                    
+                                    // 노출 보정
+                                    if (extractedExif.ExposureCompensation !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.ExposureBiasValue] = toRational(extractedExif.ExposureCompensation);
+                                    }
+                                    
+                                    // 측광 모드
+                                    if (extractedExif.MeteringMode !== undefined) {
+                                        originalExifObj['Exif'][piexif.ExifIFD.MeteringMode] = extractedExif.MeteringMode;
+                                    }
+
+                                    // GPS 정보
+                                    if (extractedExif.latitude && extractedExif.longitude) {
+                                        if (!originalExifObj['GPS']) originalExifObj['GPS'] = {};
+                                        originalExifObj['GPS'][piexif.GPSIFD.GPSVersionID] = [2, 2, 0, 0];
+                                        originalExifObj['GPS'][piexif.GPSIFD.GPSLatitudeRef] = extractedExif.latitude < 0 ? 'S' : 'N';
+                                        originalExifObj['GPS'][piexif.GPSIFD.GPSLatitude] = degToDmsRational(extractedExif.latitude);
+                                        originalExifObj['GPS'][piexif.GPSIFD.GPSLongitudeRef] = extractedExif.longitude < 0 ? 'W' : 'E';
+                                        originalExifObj['GPS'][piexif.GPSIFD.GPSLongitude] = degToDmsRational(extractedExif.longitude);
+                                        
+                                        // 고도
+                                        if (extractedExif.GPSAltitude !== undefined) {
+                                            originalExifObj['GPS'][piexif.GPSIFD.GPSAltitude] = toRational(extractedExif.GPSAltitude);
+                                            originalExifObj['GPS'][piexif.GPSIFD.GPSAltitudeRef] = extractedExif.GPSAltitude < 0 ? 1 : 0;
+                                        }
+                                    }
+                                    
+                                    console.log('✅ EXIF 메타데이터 완전 보존:', {
                                         카메라: extractedExif.Make,
                                         모델: extractedExif.Model,
+                                        조리개: extractedExif.FNumber,
+                                        셔터: extractedExif.ExposureTime,
+                                        ISO: extractedExif.ISO,
+                                        초점거리: extractedExif.FocalLength,
+                                        렌즈: extractedExif.LensModel,
                                         날짜: dateStr,
                                         GPS: extractedExif.latitude ? '있음' : '없음'
                                     });
                                 }
                                 
-                                const exifObj = { "0th": zeroth, "Exif": exif, "GPS": gps };
-                                const exifStr = piexif.dump(exifObj);
+                                // EXIF 데이터를 새 이미지에 삽입
+                                const exifStr = piexif.dump(originalExifObj);
                                 const finalDataUrl = piexif.insert(exifStr, newDataUrl);
                                 
                                 fetch(finalDataUrl).then(r => r.blob()).then(res);
